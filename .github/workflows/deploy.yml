@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@stable  # alternatively?: rustup toolchain install --profile minimal stable; rustup target add --toolchain=stable wasm32-unknown-unknown
         with:
           targets: wasm32-unknown-unknown
 
