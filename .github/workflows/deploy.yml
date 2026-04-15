@@ -13,14 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v5
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           target: wasm32-unknown-unknown
-          override: true
 
       - name: Build
         run: cargo build --release --target wasm32-unknown-unknown
