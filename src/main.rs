@@ -77,7 +77,18 @@ fn compute_blit_rect() -> Rect {
     Rect { x, y, w, h }
 }
 
-#[macroquad::main("My macroquad game")]
+fn window_conf() -> Conf {
+    Conf {
+        window_title: "My macroquad game".to_owned(),
+        platform: miniquad::conf::Platform {
+            webgl_version: miniquad::conf::WebGLVersion::WebGL2,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+#[macroquad::main(window_conf)]
 async fn main() {
     // --- Pixel-perfect render target setup ---
     let render_target = render_target(GAME_W as u32, GAME_H as u32);
