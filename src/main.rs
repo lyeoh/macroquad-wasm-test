@@ -140,7 +140,7 @@ async fn main() {
             if rand::gen_range(0, 99) >= 95 {
                 let size = rand::gen_range(16.0, 64.0);
                 squares.push(Shape {
-                    size: size,
+                    size,
                     x: rand::gen_range(size / 2.0, screen_width() - size / 2.0),
                     y: -size,
                     v_x: 0.0,
