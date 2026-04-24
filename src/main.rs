@@ -55,8 +55,8 @@ impl Shape {
 #[macroquad::main("My macroquad game")]
 async fn main() {
     const V_MAX: f32 = 400.0;
-    const MOVE_ACCEL: f32 = 50.0;
-    const FRIC_ACCEL: f32 = 15.0;
+    const MOVE_ACCEL: f32 = 3500.0;
+    const FRIC_ACCEL: f32 = 800.0;
 
     rand::srand(miniquad::date::now() as u64); // seed rng
     let mut squares = vec![];
@@ -99,27 +99,29 @@ async fn main() {
 
         if !gameover {
             // handle circle velocity
+            let fric_delta_v_i = FRIC_ACCEL * delta_time;
+            let move_delta_v_i = MOVE_ACCEL * delta_time;
             if !(is_key_down(KeyCode::Right) ^ is_key_down(KeyCode::Left)) {
-                if circle.v_x.abs() < 1e-3 {
+                if circle.v_x.abs() < fric_delta_v_i {
                     circle.v_x = 0.0;
                 } else {
-                    circle.v_x -= circle.v_x.signum() * FRIC_ACCEL;
+                    circle.v_x -= circle.v_x.signum() * fric_delta_v_i;
                 }
             } else if is_key_down(KeyCode::Right) {
-                circle.v_x += MOVE_ACCEL;
+                circle.v_x += move_delta_v_i;
             } else if is_key_down(KeyCode::Left) {
-                circle.v_x -= MOVE_ACCEL;
+                circle.v_x -= move_delta_v_i;
             }
             if !(is_key_down(KeyCode::Down) ^ is_key_down(KeyCode::Up)) {
-                if circle.v_y.abs() < 1e-3 {
+                if circle.v_y.abs() < fric_delta_v_i {
                     circle.v_y = 0.0;
                 } else {
-                    circle.v_y -= circle.v_y.signum() * FRIC_ACCEL;
+                    circle.v_y -= circle.v_y.signum() * fric_delta_v_i;
                 }
             } else if is_key_down(KeyCode::Down) {
-                circle.v_y += MOVE_ACCEL;
+                circle.v_y += move_delta_v_i;
             } else if is_key_down(KeyCode::Up) {
-                circle.v_y -= MOVE_ACCEL;
+                circle.v_y -= move_delta_v_i;
             }
 
             // ensure circle speed stays within bounds
