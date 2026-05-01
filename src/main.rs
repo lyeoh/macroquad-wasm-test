@@ -1,5 +1,6 @@
 use macroquad::prelude::*;
 use macroquad::rand::ChooseRandom;
+use std::fs;
 
 // Native/logical resolution the game renders at. Everything in the game
 // world — positions, sizes, velocities — is expressed in these units.
@@ -143,8 +144,8 @@ async fn main() {
     loop {
         let delta_time = get_frame_time();
 
+        // update game state
         if !gameover {
-            // update game state
             // handle circle velocity
             let fric_delta_v_i = FRIC_ACCEL * delta_time;
             let move_delta_v_i = MOVE_ACCEL * delta_time;
@@ -170,19 +171,6 @@ async fn main() {
             } else if is_key_down(KeyCode::Up) {
                 circle.v_y -= move_delta_v_i;
             }
-
-            // ensure circle speed stays within bounds
-            circle.v_x = clamp(circle.v_x, -V_MAX, V_MAX);
-            circle.v_y = clamp(circle.v_y, -V_MAX, V_MAX);
-
-            // handle circle movement
-            circle.x += circle.v_x * delta_time;
-            circle.y += circle.v_y * delta_time;
-
-            // ensure circle stays within logical screen
-            circle.x = clamp(circle.x, 0.0, GAME_W);
-            circle.y = clamp(circle.y, 0.0, GAME_H);
-
             // handle bullet emission
             if is_key_pressed(KeyCode::Space) {
                 bullets.push(Shape {
@@ -195,6 +183,18 @@ async fn main() {
                     collided: false,
                 });
             }
+
+            // ensure circle speed stays within bounds
+            circle.v_x = clamp(circle.v_x, -V_MAX, V_MAX);
+            circle.v_y = clamp(circle.v_y, -V_MAX, V_MAX);
+
+            // handle circle movement
+            circle.x += circle.v_x * delta_time;
+            circle.y += circle.v_y * delta_time;
+
+            // ensure circle stays within logical screen
+            circle.x = clamp(circle.x, 0.0, GAME_W);
+            circle.y = clamp(circle.y, 0.0, GAME_H);
 
             // handle square spawning
             if rand::gen_range(0, 99) >= 95 {
