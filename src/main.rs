@@ -144,7 +144,7 @@ async fn main() {
 
     // instantiate score
     let mut score: u32 = 0;
-    let high_score_path = "highscore.dat";
+    let high_score_path = "high_score.dat";
     let mut high_score: u32 = fs::read_to_string(high_score_path)
         .map_or(Ok(0), |i| i.parse::<u32>())
         .unwrap_or(0);
@@ -345,7 +345,7 @@ async fn main() {
             WHITE,
         );
 
-        // display score and highscore
+        // display score and high score
         let score_str = format!("Score: {score}");
         let text_dims = measure_text(&score_str, None, fps_fontsize as u16, 1.0);
         draw_text(
