@@ -60,6 +60,13 @@ impl Shape {
     }
 }
 
+enum GameState {
+    MainMenu,
+    Playing,
+    Paused,
+    GameOver,
+}
+
 /// Compute the letterboxed destination rect for blitting the render target to
 /// the window. Picks the largest integer scale that fits and centers it,
 /// leaving black bars around the rest.
@@ -126,23 +133,23 @@ async fn main() {
     // seed rng
     rand::srand(miniquad::date::now() as u64);
 
-    // instantiate objects
+    // initialise objects
     let mut squares: Vec<Shape> = vec![];
     let mut bullets: Vec<Shape> = vec![];
     let mut circle = Shape {
         size: 6.0,
         x: GAME_W / 2.0,
-        y: GAME_H / 2.0,
+        y: GAME_H * 3.0 / 4.0,
         v_x: 0.0,
         v_y: 0.0,
         color: YELLOW,
         collided: false,
     };
 
-    // instantiate gameover state
-    let mut gameover = false;
+    // initialise game state
+    let mut game_state = GameState::MainMenu;
 
-    // instantiate score
+    // initialise score
     let mut score: u32 = 0;
     let high_score_path = "high_score.dat";
     let mut high_score: u32 = fs::read_to_string(high_score_path)
@@ -150,167 +157,192 @@ async fn main() {
         .unwrap_or(0);
     let mut new_high_score = false;
 
-    // instantiate FPS counter
+    // initialise FPS counter
     let mut frame_counter = 0;
     let mut frametime_counter = 0.0;
     let mut fps_str = String::new();
 
     loop {
-        let delta_time = get_frame_time();
-
         // update game state
-        if !gameover {
-            // handle circle velocity
-            let fric_delta_v_i = FRIC_ACCEL * delta_time;
-            let move_delta_v_i = MOVE_ACCEL * delta_time;
-            if !(is_key_down(KeyCode::Right) ^ is_key_down(KeyCode::Left)) {
-                if circle.v_x.abs() < fric_delta_v_i {
+        let delta_time = get_frame_time();
+        match game_state {
+            GameState::MainMenu => {
+                if is_key_pressed(KeyCode::Escape) {
+                    std::process::exit(0);
+                }
+                if is_key_pressed(KeyCode::Space) {
+                    squares.clear();
+                    bullets.clear();
+                    circle.x = GAME_W / 2.0;
+                    circle.y = GAME_H * 3.0 / 4.0;
                     circle.v_x = 0.0;
-                } else {
-                    circle.v_x -= circle.v_x.signum() * fric_delta_v_i;
-                }
-            } else if is_key_down(KeyCode::Right) {
-                circle.v_x += move_delta_v_i;
-            } else if is_key_down(KeyCode::Left) {
-                circle.v_x -= move_delta_v_i;
-            }
-            if !(is_key_down(KeyCode::Down) ^ is_key_down(KeyCode::Up)) {
-                if circle.v_y.abs() < fric_delta_v_i {
                     circle.v_y = 0.0;
-                } else {
-                    circle.v_y -= circle.v_y.signum() * fric_delta_v_i;
-                }
-            } else if is_key_down(KeyCode::Down) {
-                circle.v_y += move_delta_v_i;
-            } else if is_key_down(KeyCode::Up) {
-                circle.v_y -= move_delta_v_i;
-            }
-            // handle bullet emission
-            if is_key_pressed(KeyCode::Space) {
-                bullets.push(Shape {
-                    size: 5.0,
-                    x: circle.x,
-                    y: circle.y,
-                    v_x: circle.v_x,
-                    v_y: circle.v_y - 1.1 * V_MAX,
-                    color: RED,
-                    collided: false,
-                });
-            }
-
-            // ensure circle speed stays within bounds
-            circle.v_x = clamp(circle.v_x, -V_MAX, V_MAX);
-            circle.v_y = clamp(circle.v_y, -V_MAX, V_MAX);
-
-            // handle circle movement
-            circle.x += circle.v_x * delta_time;
-            circle.y += circle.v_y * delta_time;
-
-            // ensure circle stays within logical screen
-            circle.x = clamp(circle.x, 0.0, GAME_W);
-            circle.y = clamp(circle.y, 0.0, GAME_H);
-
-            // handle square spawning
-            if rand::gen_range(0, 99) >= 95 {
-                let size = rand::gen_range(4.0, 16.0);
-                squares.push(Shape {
-                    size,
-                    x: rand::gen_range(size / 2.0, GAME_W - size / 2.0),
-                    y: -size,
-                    v_x: 0.0,
-                    v_y: rand::gen_range(10.0, 30.0),
-                    color: *[PURPLE, DARKPURPLE, RED, PINK, MAROON, VIOLET]
-                        .choose()
-                        .unwrap(),
-                    collided: false,
-                });
-            }
-
-            // handle bullets' movement
-            for bullet in &mut bullets {
-                bullet.x += bullet.v_x * delta_time;
-                bullet.y += bullet.v_y * delta_time;
-            }
-
-            // handle squares' movement
-            for square in &mut squares {
-                square.y += square.v_y * delta_time;
-            }
-
-            // remove bullets which have moved past top of screen
-            bullets.retain(|bullet| bullet.y > 0.0 - bullet.size / 2.0);
-
-            // remove squares which have moved past bottom of screen
-            squares.retain(|square| square.y < GAME_H + square.size / 2.0);
-
-            // remove bullets and squared which have collided
-            bullets.retain(|bullet| !bullet.collided);
-            squares.retain(|square| !square.collided);
-        }
-
-        // handle square-circle collisions
-        if squares
-            .iter()
-            .any(|square| circle.circ_collides_with(square))
-        {
-            if score > high_score {
-                high_score = score;
-                fs::write(high_score_path, high_score.to_string()).ok();
-                new_high_score = true;
-            }
-            gameover = true;
-        }
-
-        // handle square-bullet collisions
-        for square in squares.iter_mut() {
-            for bullet in bullets.iter_mut() {
-                if bullet.circ_collides_with(square) {
-                    bullet.collided = true;
-                    square.collided = true;
-                    score += square.size.round() as u32;
+                    score = 0;
+                    new_high_score = false;
+                    game_state = GameState::Playing;
                 }
             }
-        }
 
-        // handle restarting the game with <backspace>
-        if gameover && is_key_pressed(KeyCode::Backspace) {
-            squares.clear();
-            bullets.clear();
-            circle.x = GAME_W / 2.0;
-            circle.y = GAME_H / 2.0;
-            circle.v_x = 0.0;
-            circle.v_y = 0.0;
-            score = 0;
-            new_high_score = false;
-            gameover = false;
+            GameState::Playing => {
+                // movement
+                let fric_delta_v_i = FRIC_ACCEL * delta_time;
+                let move_delta_v_i = MOVE_ACCEL * delta_time;
+                if !(is_key_down(KeyCode::Right) ^ is_key_down(KeyCode::Left)) {
+                    if circle.v_x.abs() < fric_delta_v_i {
+                        circle.v_x = 0.0;
+                    } else {
+                        circle.v_x -= circle.v_x.signum() * fric_delta_v_i;
+                    }
+                } else if is_key_down(KeyCode::Right) {
+                    circle.v_x += move_delta_v_i;
+                } else if is_key_down(KeyCode::Left) {
+                    circle.v_x -= move_delta_v_i;
+                }
+                if !(is_key_down(KeyCode::Down) ^ is_key_down(KeyCode::Up)) {
+                    if circle.v_y.abs() < fric_delta_v_i {
+                        circle.v_y = 0.0;
+                    } else {
+                        circle.v_y -= circle.v_y.signum() * fric_delta_v_i;
+                    }
+                } else if is_key_down(KeyCode::Down) {
+                    circle.v_y += move_delta_v_i;
+                } else if is_key_down(KeyCode::Up) {
+                    circle.v_y -= move_delta_v_i;
+                }
+
+                // shoot
+                if is_key_pressed(KeyCode::Space) {
+                    bullets.push(Shape {
+                        size: 5.0,
+                        x: circle.x,
+                        y: circle.y,
+                        v_x: circle.v_x,
+                        v_y: circle.v_y - 1.1 * V_MAX,
+                        color: RED,
+                        collided: false,
+                    });
+                }
+
+                // pause
+                if is_key_pressed(KeyCode::Escape) {
+                    game_state = GameState::Paused;
+                }
+
+                // ensure circle speed stays within bounds
+                circle.v_x = clamp(circle.v_x, -V_MAX, V_MAX);
+                circle.v_y = clamp(circle.v_y, -V_MAX, V_MAX);
+
+                // handle circle movement
+                circle.x += circle.v_x * delta_time;
+                circle.y += circle.v_y * delta_time;
+
+                // ensure circle stays within logical screen
+                circle.x = clamp(circle.x, 0.0, GAME_W);
+                circle.y = clamp(circle.y, 0.0, GAME_H);
+
+                // handle square spawning
+                if rand::gen_range(0, 99) >= 95 {
+                    let size = rand::gen_range(4.0, 16.0);
+                    squares.push(Shape {
+                        size,
+                        x: rand::gen_range(size / 2.0, GAME_W - size / 2.0),
+                        y: -size,
+                        v_x: 0.0,
+                        v_y: rand::gen_range(10.0, 30.0),
+                        color: *[PURPLE, DARKPURPLE, RED, PINK, MAROON, VIOLET]
+                            .choose()
+                            .unwrap(),
+                        collided: false,
+                    });
+                }
+
+                // handle bullets' movement
+                for bullet in &mut bullets {
+                    bullet.x += bullet.v_x * delta_time;
+                    bullet.y += bullet.v_y * delta_time;
+                }
+
+                // handle squares' movement
+                for square in &mut squares {
+                    square.y += square.v_y * delta_time;
+                }
+
+                // remove bullets which have moved past top of screen
+                bullets.retain(|bullet| bullet.y > 0.0 - bullet.size / 2.0);
+
+                // remove squares which have moved past bottom of screen
+                squares.retain(|square| square.y < GAME_H + square.size / 2.0);
+
+                // remove bullets and squared which have collided
+                bullets.retain(|bullet| !bullet.collided);
+                squares.retain(|square| !square.collided);
+
+                // handle square-circle collisions
+                if squares
+                    .iter()
+                    .any(|square| circle.circ_collides_with(square))
+                {
+                    if score > high_score {
+                        high_score = score;
+                        fs::write(high_score_path, high_score.to_string()).ok();
+                        new_high_score = true;
+                    }
+                    game_state = GameState::GameOver;
+                }
+
+                // handle square-bullet collisions
+                for square in squares.iter_mut() {
+                    for bullet in bullets.iter_mut() {
+                        if bullet.circ_collides_with(square) {
+                            bullet.collided = true;
+                            square.collided = true;
+                            score += square.size.round() as u32;
+                        }
+                    }
+                }
+            }
+
+            GameState::Paused => {
+                if is_key_pressed(KeyCode::Space) {
+                    game_state = GameState::Playing;
+                }
+            }
+
+            GameState::GameOver => {
+                if is_key_pressed(KeyCode::Space) {
+                    game_state = GameState::MainMenu;
+                }
+            }
         }
 
         // ──────── Pass 1: draw the game into the low-res render target ─────
         set_camera(&game_camera);
         clear_background(DARKGREEN);
 
-        // snap drawn positions to the pixel grid
-        for bullet in &bullets {
-            draw_circle(bullet.x, bullet.y, bullet.size / 2.0, bullet.color);
+        match game_state {
+            // always draw game state
+            _ => {
+                // snap drawn positions to the pixel grid
+                for bullet in &bullets {
+                    draw_circle(bullet.x, bullet.y, bullet.size / 2.0, bullet.color);
+                }
+                for square in &squares {
+                    draw_rectangle(
+                        (square.x - square.size / 2.0).round(),
+                        (square.y - square.size / 2.0).round(),
+                        square.size,
+                        square.size,
+                        square.color,
+                    );
+                }
+                draw_circle(circle.x.round(), circle.y.round(), circle.size, YELLOW);
+            }
         }
-        for square in &squares {
-            draw_rectangle(
-                (square.x - square.size / 2.0).round(),
-                (square.y - square.size / 2.0).round(),
-                square.size,
-                square.size,
-                square.color,
-            );
-        }
-        draw_circle(circle.x.round(), circle.y.round(), circle.size, YELLOW);
 
         // ───────── Pass 2: blit the render target to the actual screen ─────────
         set_default_camera();
         clear_background(BLACK); // letterbox bars
-
         let blit = compute_blit_rect();
-        let ui_scale = blit.w / GAME_W;
-
         draw_texture_ex(
             &render_target.texture,
             blit.x,
@@ -323,7 +355,7 @@ async fn main() {
                 ..Default::default()
             },
         );
-
+        let ui_scale = blit.w / GAME_W;
         let padding = 2.0 * ui_scale;
 
         // display FPS
@@ -345,80 +377,144 @@ async fn main() {
             WHITE,
         );
 
-        // display score and high score
-        let score_str = format!("Score: {score}");
-        let text_dims = measure_text(&score_str, None, fps_fontsize as u16, 1.0);
-        draw_text(
-            &score_str,
-            blit.x + padding,
-            blit.y + text_dims.offset_y + padding,
-            fps_fontsize,
-            WHITE,
-        );
+        // display score outside of main menu
+        match game_state {
+            GameState::MainMenu => {}
+            _ => {
+                let score_str = format!("Score: {score}");
+                let text_dims = measure_text(&score_str, None, fps_fontsize as u16, 1.0);
+                draw_text(
+                    &score_str,
+                    blit.x + padding,
+                    blit.y + text_dims.offset_y + padding,
+                    fps_fontsize,
+                    WHITE,
+                );
+            }
+        }
 
-        if gameover {
-            if new_high_score {
-                let text = format!("NEW HIGH SCORE");
-                let fontsize = 40.0 * ui_scale;
+        match game_state {
+            GameState::MainMenu => {
+                let text = "press space to start";
+                let fontsize = 20.0 * ui_scale;
                 let text_dims = measure_text(&text, None, fontsize as u16, 1.0);
                 draw_text(
                     &text,
                     screen_width() / 2.0 - text_dims.width / 2.0,
-                    screen_height() / 2.0 - text_dims.offset_y + text_dims.height / 2.0,
+                    screen_height() / 2.0,
                     fontsize,
-                    BLACK,
-                );
-                let text = format!("{high_score}");
-                let text_dims = measure_text(&text, None, fontsize as u16, 1.0);
-                draw_text(
-                    &text,
-                    screen_width() / 2.0 - text_dims.width / 2.0,
-                    screen_height() / 2.0 - text_dims.offset_y
-                        + text_dims.height / 2.0
-                        + 1.5 * text_dims.height,
-                    fontsize,
-                    BLACK,
+                    WHITE,
                 );
 
-                high_score = score;
-                fs::write(high_score_path, high_score.to_string()).ok();
-            } else {
-                let text = "YOU DIED";
-                let fontsize = 40.0 * ui_scale;
-                let text_dims = measure_text(text, None, fontsize as u16, 1.0);
-                draw_text(
-                    text,
-                    screen_width() / 2.0 - text_dims.width / 2.0,
-                    screen_height() / 2.0 - text_dims.offset_y + text_dims.height / 2.0,
-                    fontsize,
-                    BLACK,
-                );
-
-                let text = format!("high score: {high_score}");
+                let text = "press escape to quit";
                 let fontsize = 10.0 * ui_scale;
                 let text_dims = measure_text(&text, None, fontsize as u16, 1.0);
                 draw_text(
                     &text,
                     screen_width() / 2.0 - text_dims.width / 2.0,
-                    blit.y + blit.h * 3.0 / 5.0 - text_dims.offset_y + text_dims.height / 2.0,
+                    blit.y + blit.h - (text_dims.height - text_dims.offset_y) - padding,
                     fontsize,
-                    BLACK,
+                    WHITE,
                 );
             }
 
-            let text = "press backspace to try again";
-            let fontsize = 10.0 * ui_scale;
-            let text_dims = measure_text(text, None, fontsize as u16, 1.0);
-            draw_text(
-                text,
-                screen_width() / 2.0 - text_dims.width / 2.0,
-                blit.y + blit.h * 4.0 / 5.0 - text_dims.offset_y + text_dims.height / 2.0,
-                fontsize,
-                WHITE,
-            );
+            GameState::Playing => {
+                let text = format!("<esc> to pause");
+                let text_dims = measure_text(&text, None, fps_fontsize as u16, 1.0);
+                draw_text(
+                    &text,
+                    blit.x + blit.w - text_dims.width - padding,
+                    blit.y + blit.h - (text_dims.height - text_dims.offset_y) - padding,
+                    fps_fontsize,
+                    WHITE,
+                );
+            }
+
+            GameState::Paused => {
+                let text = "paused";
+                let fontsize = 40.0 * ui_scale;
+                let text_dims = measure_text(text, None, fontsize as u16, 1.0);
+                draw_text(
+                    text,
+                    screen_width() / 2.0 - text_dims.width / 2.0,
+                    screen_height() / 2.0,
+                    fontsize,
+                    WHITE,
+                );
+
+                let text = "press space to continue";
+                let fontsize = 10.0 * ui_scale;
+                let text_dims = measure_text(text, None, fontsize as u16, 1.0);
+                draw_text(
+                    text,
+                    screen_width() / 2.0 - text_dims.width / 2.0,
+                    blit.y + blit.h - (text_dims.height - text_dims.offset_y) - padding,
+                    fontsize,
+                    WHITE,
+                );
+            }
+
+            GameState::GameOver => {
+                if new_high_score {
+                    let text = format!("NEW HIGH SCORE");
+                    let fontsize = 40.0 * ui_scale;
+                    let text_dims = measure_text(&text, None, fontsize as u16, 1.0);
+                    draw_text(
+                        &text,
+                        screen_width() / 2.0 - text_dims.width / 2.0,
+                        screen_height() / 2.0,
+                        fontsize,
+                        WHITE,
+                    );
+                    let text = format!("{high_score}");
+                    let text_dims = measure_text(&text, None, fontsize as u16, 1.0);
+                    draw_text(
+                        &text,
+                        screen_width() / 2.0 - text_dims.width / 2.0,
+                        screen_height() / 2.0 + 1.5 * text_dims.height,
+                        fontsize,
+                        WHITE,
+                    );
+
+                    high_score = score;
+                    fs::write(high_score_path, high_score.to_string()).ok();
+                } else {
+                    let text = "YOU DIED";
+                    let fontsize = 40.0 * ui_scale;
+                    let text_dims = measure_text(text, None, fontsize as u16, 1.0);
+                    draw_text(
+                        text,
+                        screen_width() / 2.0 - text_dims.width / 2.0,
+                        screen_height() / 2.0,
+                        fontsize,
+                        WHITE,
+                    );
+
+                    let text = format!("high score: {high_score}");
+                    let fontsize = 10.0 * ui_scale;
+                    let text_dims = measure_text(&text, None, fontsize as u16, 1.0);
+                    draw_text(
+                        &text,
+                        screen_width() / 2.0 - text_dims.width / 2.0,
+                        screen_height() / 2.0 + blit.h / 4.0,
+                        fontsize,
+                        WHITE,
+                    );
+                }
+
+                let text = "press space to return to main menu";
+                let fontsize = 10.0 * ui_scale;
+                let text_dims = measure_text(text, None, fontsize as u16, 1.0);
+                draw_text(
+                    text,
+                    screen_width() / 2.0 - text_dims.width / 2.0,
+                    blit.y + blit.h - (text_dims.height - text_dims.offset_y) - padding,
+                    fontsize,
+                    WHITE,
+                );
+            }
         }
 
         next_frame().await
     }
-    // println!("Hello, world!");
 }
