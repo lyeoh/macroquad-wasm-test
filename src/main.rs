@@ -123,7 +123,10 @@ async fn main() {
     const MOVE_ACCEL: f32 = 700.0;
     const FRIC_ACCEL: f32 = 160.0;
 
-    rand::srand(miniquad::date::now() as u64); // seed rng
+    // seed rng
+    rand::srand(miniquad::date::now() as u64);
+
+    // instantiate objects
     let mut squares: Vec<Shape> = vec![];
     let mut bullets: Vec<Shape> = vec![];
     let mut circle = Shape {
@@ -136,11 +139,22 @@ async fn main() {
         collided: false,
     };
 
+    // instantiate gameover state
     let mut gameover = false;
 
+    // instantiate score
+    let mut score: u32 = 0;
+    let high_score_path = "highscore.dat";
+    let mut high_score: u32 = fs::read_to_string(high_score_path)
+        .map_or(Ok(0), |i| i.parse::<u32>())
+        .unwrap_or(0);
+    let mut new_high_score = false;
+
+    // instantiate FPS counter
     let mut frame_counter = 0;
     let mut frametime_counter = 0.0;
     let mut fps_str = String::new();
+
     loop {
         let delta_time = get_frame_time();
 
@@ -239,6 +253,11 @@ async fn main() {
             .iter()
             .any(|square| circle.circ_collides_with(square))
         {
+            if score > high_score {
+                high_score = score;
+                fs::write(high_score_path, high_score.to_string()).ok();
+                new_high_score = true;
+            }
             gameover = true;
         }
 
@@ -248,6 +267,7 @@ async fn main() {
                 if bullet.circ_collides_with(square) {
                     bullet.collided = true;
                     square.collided = true;
+                    score += square.size.round() as u32;
                 }
             }
         }
@@ -260,6 +280,8 @@ async fn main() {
             circle.y = GAME_H / 2.0;
             circle.v_x = 0.0;
             circle.v_y = 0.0;
+            score = 0;
+            new_high_score = false;
             gameover = false;
         }
 
@@ -302,7 +324,9 @@ async fn main() {
             },
         );
 
-        // handle and display average FPS
+        let padding = 2.0 * ui_scale;
+
+        // display FPS
         frame_counter += 1;
         frametime_counter += delta_time;
         if frametime_counter > 1.0 {
@@ -315,23 +339,72 @@ async fn main() {
         let text_dims = measure_text(&fps_str, None, fps_fontsize as u16, 1.0);
         draw_text(
             &fps_str,
-            blit.x + blit.w - text_dims.width - 2.0 * ui_scale,
-            blit.y + text_dims.offset_y + 2.0 * ui_scale,
+            blit.x + blit.w - text_dims.width - padding,
+            blit.y + text_dims.offset_y + padding,
             fps_fontsize,
-            BLACK,
+            WHITE,
+        );
+
+        // display score and highscore
+        let score_str = format!("Score: {score}");
+        let text_dims = measure_text(&score_str, None, fps_fontsize as u16, 1.0);
+        draw_text(
+            &score_str,
+            blit.x + padding,
+            blit.y + text_dims.offset_y + padding,
+            fps_fontsize,
+            WHITE,
         );
 
         if gameover {
-            let text = "YOU DIED";
-            let fontsize = 40.0 * ui_scale;
-            let text_dims = measure_text(text, None, fontsize as u16, 1.0);
-            draw_text(
-                text,
-                screen_width() / 2.0 - text_dims.width / 2.0,
-                screen_height() / 2.0 - text_dims.offset_y + text_dims.height / 2.0,
-                fontsize,
-                BLACK,
-            );
+            if new_high_score {
+                let text = format!("NEW HIGH SCORE");
+                let fontsize = 40.0 * ui_scale;
+                let text_dims = measure_text(&text, None, fontsize as u16, 1.0);
+                draw_text(
+                    &text,
+                    screen_width() / 2.0 - text_dims.width / 2.0,
+                    screen_height() / 2.0 - text_dims.offset_y + text_dims.height / 2.0,
+                    fontsize,
+                    BLACK,
+                );
+                let text = format!("{high_score}");
+                let text_dims = measure_text(&text, None, fontsize as u16, 1.0);
+                draw_text(
+                    &text,
+                    screen_width() / 2.0 - text_dims.width / 2.0,
+                    screen_height() / 2.0 - text_dims.offset_y
+                        + text_dims.height / 2.0
+                        + 1.5 * text_dims.height,
+                    fontsize,
+                    BLACK,
+                );
+
+                high_score = score;
+                fs::write(high_score_path, high_score.to_string()).ok();
+            } else {
+                let text = "YOU DIED";
+                let fontsize = 40.0 * ui_scale;
+                let text_dims = measure_text(text, None, fontsize as u16, 1.0);
+                draw_text(
+                    text,
+                    screen_width() / 2.0 - text_dims.width / 2.0,
+                    screen_height() / 2.0 - text_dims.offset_y + text_dims.height / 2.0,
+                    fontsize,
+                    BLACK,
+                );
+
+                let text = format!("high score: {high_score}");
+                let fontsize = 10.0 * ui_scale;
+                let text_dims = measure_text(&text, None, fontsize as u16, 1.0);
+                draw_text(
+                    &text,
+                    screen_width() / 2.0 - text_dims.width / 2.0,
+                    blit.y + blit.h * 3.0 / 5.0 - text_dims.offset_y + text_dims.height / 2.0,
+                    fontsize,
+                    BLACK,
+                );
+            }
 
             let text = "press backspace to try again";
             let fontsize = 10.0 * ui_scale;
@@ -339,7 +412,7 @@ async fn main() {
             draw_text(
                 text,
                 screen_width() / 2.0 - text_dims.width / 2.0,
-                blit.y + blit.h * 3.0 / 4.0 - text_dims.offset_y + text_dims.height / 2.0,
+                blit.y + blit.h * 4.0 / 5.0 - text_dims.offset_y + text_dims.height / 2.0,
                 fontsize,
                 WHITE,
             );
