@@ -14,6 +14,7 @@ struct Shape {
     v_x: f32,
     v_y: f32,
     color: Color,
+    collided: bool,
 }
 
 impl Shape {
@@ -123,6 +124,7 @@ async fn main() {
 
     rand::srand(miniquad::date::now() as u64); // seed rng
     let mut squares: Vec<Shape> = vec![];
+    let mut bullets: Vec<Shape> = vec![];
     let mut circle = Shape {
         size: 6.0,
         x: GAME_W / 2.0,
@@ -130,6 +132,7 @@ async fn main() {
         v_x: 0.0,
         v_y: 0.0,
         color: YELLOW,
+        collided: false,
     };
 
     let mut gameover = false;
@@ -180,6 +183,19 @@ async fn main() {
             circle.x = clamp(circle.x, 0.0, GAME_W);
             circle.y = clamp(circle.y, 0.0, GAME_H);
 
+            // handle bullet emission
+            if is_key_pressed(KeyCode::Space) {
+                bullets.push(Shape {
+                    size: 5.0,
+                    x: circle.x,
+                    y: circle.y,
+                    v_x: circle.v_x,
+                    v_y: circle.v_y - 1.1 * V_MAX,
+                    color: RED,
+                    collided: false,
+                });
+            }
+
             // handle square spawning
             if rand::gen_range(0, 99) >= 95 {
                 let size = rand::gen_range(4.0, 16.0);
@@ -192,7 +208,14 @@ async fn main() {
                     color: *[PURPLE, DARKPURPLE, RED, PINK, MAROON, VIOLET]
                         .choose()
                         .unwrap(),
+                    collided: false,
                 });
+            }
+
+            // handle bullets' movement
+            for bullet in &mut bullets {
+                bullet.x += bullet.v_x * delta_time;
+                bullet.y += bullet.v_y * delta_time;
             }
 
             // handle squares' movement
@@ -200,11 +223,18 @@ async fn main() {
                 square.y += square.v_y * delta_time;
             }
 
+            // remove bullets which have moved past top of screen
+            bullets.retain(|bullet| bullet.y > 0.0 - bullet.size / 2.0);
+
             // remove squares which have moved past bottom of screen
-            squares.retain(|square| square.y < GAME_H + square.size);
+            squares.retain(|square| square.y < GAME_H + square.size / 2.0);
+
+            // remove bullets and squared which have collided
+            bullets.retain(|bullet| !bullet.collided);
+            squares.retain(|square| !square.collided);
         }
 
-        // handle collisions
+        // handle square-circle collisions
         if squares
             .iter()
             .any(|square| circle.circ_collides_with(square))
@@ -212,11 +242,20 @@ async fn main() {
             gameover = true;
         }
 
-        // handle restarting the game with <space>
-        if gameover && is_key_pressed(KeyCode::Space) {
+        // handle square-bullet collisions
+        for square in squares.iter_mut() {
+            for bullet in bullets.iter_mut() {
+                if bullet.circ_collides_with(square) {
+                    bullet.collided = true;
+                    square.collided = true;
+                }
+            }
+        }
+
         // handle restarting the game with <backspace>
         if gameover && is_key_pressed(KeyCode::Backspace) {
             squares.clear();
+            bullets.clear();
             circle.x = GAME_W / 2.0;
             circle.y = GAME_H / 2.0;
             circle.v_x = 0.0;
@@ -228,10 +267,10 @@ async fn main() {
         set_camera(&game_camera);
         clear_background(DARKGREEN);
 
-        // Snap positions to the logical pixel grid at draw time. Game state
-        // stays in floats (for smooth physics) but the rasterizer always
-        // sees integer coordinates, so shape outlines don't shimmer as
-        // sub-pixel positions drift frame-to-frame.
+        // snap drawn positions to the pixel grid
+        for bullet in &bullets {
+            draw_circle(bullet.x, bullet.y, bullet.size / 2.0, bullet.color);
+        }
         for square in &squares {
             draw_rectangle(
                 (square.x - square.size / 2.0).round(),
