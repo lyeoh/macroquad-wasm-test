@@ -214,6 +214,8 @@ async fn main() {
 
         // handle restarting the game with <space>
         if gameover && is_key_pressed(KeyCode::Space) {
+        // handle restarting the game with <backspace>
+        if gameover && is_key_pressed(KeyCode::Backspace) {
             squares.clear();
             circle.x = GAME_W / 2.0;
             circle.y = GAME_H / 2.0;
@@ -292,7 +294,7 @@ async fn main() {
                 BLACK,
             );
 
-            let text = "press space to try again";
+            let text = "press backspace to try again";
             let fontsize = 10.0 * ui_scale;
             let text_dims = measure_text(text, None, fontsize as u16, 1.0);
             draw_text(
