@@ -21,11 +21,11 @@ impl Shape {
     //     self.rect().overlaps(&other.rect())
     // }
 
+    // assumes other is a rect
     fn circ_collides_with(&self, other: &Self) -> bool {
         self.circ_overlaps(&other.rect())
     }
 
-    // assumes other is a rect
     fn circ_overlaps(&self, orect: &Rect) -> bool {
         let corners = [
             (orect.x, orect.y),
