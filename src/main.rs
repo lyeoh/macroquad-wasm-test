@@ -396,7 +396,7 @@ async fn main() {
                         // (bullet.x - bullet_frame.dest_size.x / 2.0).round(),
                         // (bullet.y - bullet_frame.dest_size.y / 2.0).round(),
                         (bullet.x - 8.0).round(),
-                        (bullet.y - 4.0).round(),
+                        (bullet.y - 4.0).round(), // specific to sprite dimensions
                         WHITE,
                         DrawTextureParams {
                             dest_size: Some(bullet_frame.dest_size),
@@ -420,7 +420,7 @@ async fn main() {
                     // (circle.x - ship_frame.dest_size.x / 2.0).round(),
                     // (circle.y - ship_frame.dest_size.y / 2.0).round(),
                     (circle.x - 8.0).round(),
-                    (circle.y - 7.0).round(),
+                    (circle.y - 7.0).round(), // specific to sprite dimensions
                     WHITE,
                     DrawTextureParams {
                         dest_size: Some(ship_frame.dest_size),
