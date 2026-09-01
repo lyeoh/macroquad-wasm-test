@@ -1,3 +1,4 @@
+use macroquad::experimental::animation::{AnimatedSprite, Animation};
 use macroquad::prelude::*;
 use macroquad::rand::ChooseRandom;
 use std::fs;
@@ -9,7 +10,7 @@ const GAME_W: f32 = 320.0;
 const GAME_H: f32 = 180.0;
 
 struct Shape {
-    size: f32,
+    size: f32, // diameter for circles
     x: f32,
     y: f32,
     v_x: f32,
@@ -36,7 +37,9 @@ impl Shape {
             (orect.x + orect.w, orect.y + orect.h),
         ];
         for corner in corners.into_iter() {
-            if (corner.0 - self.x).powi(2) + (corner.1 - self.y).powi(2) <= self.size.powi(2) {
+            if (corner.0 - self.x).powi(2) + (corner.1 - self.y).powi(2)
+                <= (self.size / 2.0).powi(2)
+            {
                 return true;
             }
         }
@@ -137,7 +140,7 @@ async fn main() {
     let mut squares: Vec<Shape> = vec![];
     let mut bullets: Vec<Shape> = vec![];
     let mut circle = Shape {
-        size: 6.0,
+        size: 14.0,
         x: GAME_W / 2.0,
         y: GAME_H * 3.0 / 4.0,
         v_x: 0.0,
@@ -161,6 +164,63 @@ async fn main() {
     let mut frame_counter = 0;
     let mut frametime_counter = 0.0;
     let mut fps_str = String::new();
+
+    // load assets
+    set_pc_assets_folder("assets");
+    let ship_texture: Texture2D = load_texture("ship.png").await.expect("Couldn't load file");
+    ship_texture.set_filter(FilterMode::Nearest);
+    let bullet_texture: Texture2D = load_texture("laser-bolts.png")
+        .await
+        .expect("Couldn't load file");
+    bullet_texture.set_filter(FilterMode::Nearest);
+    build_textures_atlas();
+
+    // initialise sprites
+    let mut bullet_sprite = AnimatedSprite::new(
+        16,
+        16,
+        &[
+            Animation {
+                name: "bullet".to_string(),
+                row: 0,
+                frames: 2,
+                fps: 12,
+            },
+            Animation {
+                name: "bolt".to_string(),
+                row: 1,
+                frames: 2,
+                fps: 12,
+            },
+        ],
+        true,
+    );
+    bullet_sprite.set_animation(1);
+    let mut ship_sprite = AnimatedSprite::new(
+        16,
+        24,
+        &[
+            Animation {
+                name: "idle".to_string(),
+                row: 0,
+                frames: 2,
+                fps: 12,
+            },
+            Animation {
+                name: "left".to_string(),
+                row: 2,
+                frames: 2,
+                fps: 12,
+            },
+            Animation {
+                name: "right".to_string(),
+                row: 4,
+                frames: 2,
+                fps: 12,
+            },
+        ],
+        true,
+    );
 
     loop {
         // update game state
@@ -187,6 +247,7 @@ async fn main() {
                 // movement
                 let fric_delta_v_i = FRIC_ACCEL * delta_time;
                 let move_delta_v_i = MOVE_ACCEL * delta_time;
+                ship_sprite.set_animation(0);
                 if !(is_key_down(KeyCode::Right) ^ is_key_down(KeyCode::Left)) {
                     if circle.v_x.abs() < fric_delta_v_i {
                         circle.v_x = 0.0;
@@ -194,8 +255,10 @@ async fn main() {
                         circle.v_x -= circle.v_x.signum() * fric_delta_v_i;
                     }
                 } else if is_key_down(KeyCode::Right) {
+                    ship_sprite.set_animation(2);
                     circle.v_x += move_delta_v_i;
                 } else if is_key_down(KeyCode::Left) {
+                    ship_sprite.set_animation(1);
                     circle.v_x -= move_delta_v_i;
                 }
                 if !(is_key_down(KeyCode::Down) ^ is_key_down(KeyCode::Up)) {
@@ -215,7 +278,7 @@ async fn main() {
                     bullets.push(Shape {
                         size: 5.0,
                         x: circle.x,
-                        y: circle.y,
+                        y: circle.y - 24.0,
                         v_x: circle.v_x,
                         v_y: circle.v_y - 1.1 * V_MAX,
                         color: RED,
@@ -242,10 +305,10 @@ async fn main() {
 
                 // handle square spawning
                 if rand::gen_range(0, 99) >= 95 {
-                    let size = rand::gen_range(4.0, 16.0);
+                    let size = rand::gen_range(4, 16) as f32;
                     squares.push(Shape {
                         size,
-                        x: rand::gen_range(size / 2.0, GAME_W - size / 2.0),
+                        x: rand::gen_range(size / 2.0, GAME_W - size / 2.0).round(),
                         y: -size,
                         v_x: 0.0,
                         v_y: rand::gen_range(10.0, 30.0),
@@ -266,6 +329,9 @@ async fn main() {
                 for square in &mut squares {
                     square.y += square.v_y * delta_time;
                 }
+
+                ship_sprite.update();
+                bullet_sprite.update();
 
                 // remove bullets which have moved past top of screen
                 bullets.retain(|bullet| bullet.y > 0.0 - bullet.size / 2.0);
@@ -321,10 +387,23 @@ async fn main() {
 
         match game_state {
             // always draw game state
+            // snap drawn positions to the pixel grid
             _ => {
-                // snap drawn positions to the pixel grid
+                let bullet_frame = bullet_sprite.frame();
                 for bullet in &bullets {
-                    draw_circle(bullet.x, bullet.y, bullet.size / 2.0, bullet.color);
+                    draw_texture_ex(
+                        &bullet_texture,
+                        // (bullet.x - bullet_frame.dest_size.x / 2.0).round(),
+                        // (bullet.y - bullet_frame.dest_size.y / 2.0).round(),
+                        (bullet.x - 8.0).round(),
+                        (bullet.y - 4.0).round(),
+                        WHITE,
+                        DrawTextureParams {
+                            dest_size: Some(bullet_frame.dest_size),
+                            source: Some(bullet_frame.source_rect),
+                            ..Default::default()
+                        },
+                    )
                 }
                 for square in &squares {
                     draw_rectangle(
@@ -335,7 +414,20 @@ async fn main() {
                         square.color,
                     );
                 }
-                draw_circle(circle.x.round(), circle.y.round(), circle.size, YELLOW);
+                let ship_frame = ship_sprite.frame();
+                draw_texture_ex(
+                    &ship_texture,
+                    // (circle.x - ship_frame.dest_size.x / 2.0).round(),
+                    // (circle.y - ship_frame.dest_size.y / 2.0).round(),
+                    (circle.x - 8.0).round(),
+                    (circle.y - 7.0).round(),
+                    WHITE,
+                    DrawTextureParams {
+                        dest_size: Some(ship_frame.dest_size),
+                        source: Some(ship_frame.source_rect),
+                        ..Default::default()
+                    },
+                );
             }
         }
 

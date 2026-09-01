@@ -6,3 +6,6 @@ default-run = "my-macroquad-game"
 
 [dependencies]
 macroquad = "0.4"
+
+[profile.dev.package.'*']
+opt-level = 3
