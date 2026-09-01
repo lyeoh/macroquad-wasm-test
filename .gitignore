@@ -1,2 +1,8 @@
 src/bin
 /target
+
+# temp file
+high_score.dat
+
+# macos
+.DS_Store
